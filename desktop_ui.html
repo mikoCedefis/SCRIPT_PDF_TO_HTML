@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>DOCX a HTML - Revista Científica</title>
+<style>
+    * { box-sizing: border-box; }
+    body {
+        margin: 0;
+        font-family: -apple-system, 'Segoe UI', Arial, sans-serif;
+        display: flex;
+        height: 100vh;
+        color: #222;
+        background: #f4f4f4;
+    }
+
+    #sidebar {
+        width: 340px;
+        min-width: 340px;
+        background: #09232B;
+        color: #fff;
+        display: flex;
+        flex-direction: column;
+        padding: 16px;
+    }
+
+    #sidebar h1 {
+        font-size: 1.1em;
+        margin: 0 0 12px 0;
+    }
+
+    button {
+        background: #D9D9D9;
+        color: #09232B;
+        border: none;
+        border-radius: 4px;
+        padding: 10px 12px;
+        font-size: 0.95em;
+        font-weight: 600;
+        cursor: pointer;
+        margin-bottom: 8px;
+    }
+
+    button:hover { background: #ffffff; }
+    button:disabled { opacity: 0.5; cursor: default; }
+
+    #file-list {
+        flex: 1;
+        overflow-y: auto;
+        margin-top: 12px;
+        border-top: 1px solid rgba(255,255,255,0.2);
+        padding-top: 8px;
+    }
+
+    .file-item {
+        padding: 8px 10px;
+        border-radius: 4px;
+        margin-bottom: 6px;
+        cursor: pointer;
+        font-size: 0.85em;
+        line-height: 1.4;
+        word-break: break-word;
+    }
+
+    .file-item:hover { background: rgba(255,255,255,0.1); }
+    .file-item.active { background: rgba(255,255,255,0.2); }
+
+    .status {
+        display: inline-block;
+        font-size: 0.75em;
+        margin-top: 2px;
+        padding: 1px 6px;
+        border-radius: 3px;
+    }
+
+    .status.pending { background: #7f8c8d; }
+    .status.ok { background: #2e7d32; }
+    .status.error { background: #c0392b; }
+
+    #preview-wrap {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+
+    #preview-bar {
+        padding: 10px 16px;
+        background: #fff;
+        border-bottom: 1px solid #ddd;
+        font-size: 0.85em;
+        color: #555;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    #preview-bar-text {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    #preview-bar button {
+        margin-bottom: 0;
+        flex-shrink: 0;
+    }
+
+    #save-status {
+        font-size: 0.8em;
+        color: #2e7d32;
+    }
+
+    #preview {
+        flex: 1;
+        border: none;
+        background: #fff;
+    }
+
+    #empty-state {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #888;
+        font-size: 0.95em;
+    }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+    <h1>DOCX &rarr; HTML Revista</h1>
+    <button id="btn-pick">Seleccionar archivos .docx</button>
+    <button id="btn-convert" disabled>Normalizar y convertir</button>
+    <div id="file-list"></div>
+</div>
+
+<div id="preview-wrap">
+    <div id="preview-bar">
+        <span id="preview-bar-text">Selecciona un artículo convertido para previsualizarlo</span>
+        <span id="save-status"></span>
+        <button id="btn-save" disabled>Guardar como...</button>
+    </div>
+    <div id="empty-state">Aún no hay vista previa</div>
+    <iframe id="preview" style="display:none;"></iframe>
+</div>
+
+<script>
+    let files = [];
+
+    function render() {
+        const list = document.getElementById('file-list');
+        list.innerHTML = '';
+        files.forEach((f, i) => {
+            const div = document.createElement('div');
+            div.className = 'file-item' + (f.active ? ' active' : '');
+            const statusClass = f.status || 'pending';
+            const statusLabel = { pending: 'pendiente', ok: 'listo', error: 'error' }[statusClass];
+            div.innerHTML = `${f.name}<br><span class="status ${statusClass}">${statusLabel}</span>`;
+            div.onclick = () => selectFile(i);
+            list.appendChild(div);
+        });
+    }
+
+    let currentFile = null;
+
+    function selectFile(i) {
+        files.forEach(f => f.active = false);
+        files[i].active = true;
+        render();
+
+        const f = files[i];
+        currentFile = f;
+        const barText = document.getElementById('preview-bar-text');
+        const iframe = document.getElementById('preview');
+        const empty = document.getElementById('empty-state');
+        const btnSave = document.getElementById('btn-save');
+        document.getElementById('save-status').textContent = '';
+
+        if (f.status === 'ok') {
+            barText.textContent = f.name + ' — haz clic en el texto para editarlo';
+            iframe.srcdoc = f.html;
+            iframe.style.display = 'block';
+            empty.style.display = 'none';
+            btnSave.disabled = false;
+        } else if (f.status === 'error') {
+            barText.textContent = f.name + ' — error: ' + f.message;
+            iframe.style.display = 'none';
+            empty.style.display = 'flex';
+            empty.textContent = f.message;
+            btnSave.disabled = true;
+        } else {
+            barText.textContent = f.name + ' — aún no convertido';
+            iframe.style.display = 'none';
+            empty.style.display = 'flex';
+            empty.textContent = 'Presiona "Normalizar y convertir"';
+            btnSave.disabled = true;
+        }
+    }
+
+    document.getElementById('preview').addEventListener('load', function () {
+        try {
+            const doc = this.contentDocument;
+            if (doc && doc.body) {
+                doc.body.contentEditable = 'true';
+                doc.body.spellcheck = false;
+            }
+        } catch (e) {
+            // iframe vacío u otro estado sin documento editable
+        }
+    });
+
+    function getCurrentIframeHtml() {
+        const iframe = document.getElementById('preview');
+        const doc = iframe.contentDocument;
+        const hadAttr = doc.body.hasAttribute('contenteditable');
+        doc.body.removeAttribute('contenteditable');
+        doc.body.removeAttribute('spellcheck');
+        const html = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+        if (hadAttr) doc.body.setAttribute('contenteditable', 'true');
+        return html;
+    }
+
+    async function saveCurrent() {
+        if (!currentFile || currentFile.status !== 'ok') return;
+        const status = document.getElementById('save-status');
+        const html = getCurrentIframeHtml();
+        const suggestedName = currentFile.name.replace(/\.docx$/i, '.html');
+
+        status.textContent = 'Guardando...';
+        const savedPath = await pywebview.api.save_html(html, suggestedName);
+        status.textContent = savedPath ? ('Guardado en: ' + savedPath) : '';
+    }
+
+    async function pickFiles() {
+        const paths = await pywebview.api.pick_files();
+        if (!paths || paths.length === 0) return;
+        for (const p of paths) {
+            const name = p.split(/[\\/]/).pop();
+            if (!files.some(f => f.path === p)) {
+                files.push({ path: p, name, status: 'pending' });
+            }
+        }
+        document.getElementById('btn-convert').disabled = files.length === 0;
+        render();
+    }
+
+    async function convertFiles() {
+        const btn = document.getElementById('btn-convert');
+        btn.disabled = true;
+        btn.textContent = 'Convirtiendo...';
+
+        const paths = files.map(f => f.path);
+        const results = await pywebview.api.convert(paths);
+
+        results.forEach(r => {
+            const f = files.find(f => f.path === r.path);
+            if (!f) return;
+            f.status = r.ok ? 'ok' : 'error';
+            f.message = r.message;
+            f.output_path = r.output_path;
+            f.html = r.html;
+        });
+
+        btn.disabled = false;
+        btn.textContent = 'Normalizar y convertir';
+        render();
+
+        const firstOk = files.findIndex(f => f.status === 'ok');
+        if (firstOk >= 0) selectFile(firstOk);
+    }
+
+    window.addEventListener('pywebviewready', () => {
+        document.getElementById('btn-pick').onclick = pickFiles;
+        document.getElementById('btn-convert').onclick = convertFiles;
+        document.getElementById('btn-save').onclick = saveCurrent;
+    });
+</script>
+
+</body>
+</html>

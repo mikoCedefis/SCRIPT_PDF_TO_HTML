@@ -1,0 +1,22 @@
+# Documentos Word y temporales de Office/LibreOffice
+docx/
+docx_backup_*/
+.~lock.*.docx#
+~$*.docx
+
+# Archivos HTML generados
+html/
+
+# PDFs
+*.pdf
+ARTICULOS INDIVIDUALES PDFs/
+
+# Entorno virtual de Python y cache
+env/
+venv/
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
+

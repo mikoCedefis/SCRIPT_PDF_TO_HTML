@@ -3,6 +3,8 @@ from docx.oxml.ns import qn
 from docx.text.paragraph import Paragraph
 from docx.table import Table
 import html
+import os
+import glob
 
 # -------------------------------------------------
 # ITERAR BLOQUES (PÁRRAFOS + TABLAS EN ORDEN REAL)
@@ -33,11 +35,16 @@ def get_hyperlink(run):
 # -------------------------------------------------
 
 def run_to_html(run):
-    text = html.escape(run.text)
-    if not text.strip():
+    if not run.text:
         return ""
 
+    text = html.escape(run.text)
     url = get_hyperlink(run)
+
+    if run.font.superscript:
+        text = f"<sup>{text}</sup>"
+    elif run.font.subscript:
+        text = f"<sub>{text}</sub>"
 
     if run.italic:
         text = f"<em>{text}</em>"
@@ -57,17 +64,27 @@ def paragraph_to_html(paragraph):
 # TABLAS
 # -------------------------------------------------
 
+def row_to_html(row, cell_tag):
+    html_row = "<tr>"
+    for cell in row.cells:
+        cell_content = ""
+        for p in cell.paragraphs:
+            cell_content += paragraph_to_html(p) + "<br>"
+        html_row += f"<{cell_tag}>{cell_content}</{cell_tag}>"
+    html_row += "</tr>\n"
+    return html_row
+
 def table_to_html(table):
-    html_table = "<table>\n"
-    for row in table.rows:
-        html_table += "<tr>"
-        for cell in row.cells:
-            cell_content = ""
-            for p in cell.paragraphs:
-                cell_content += paragraph_to_html(p) + "<br>"
-            html_table += f"<td>{cell_content}</td>"
-        html_table += "</tr>\n"
-    html_table += "</table>"
+    rows = table.rows
+    if not rows:
+        return "<table>\n</table>"
+
+    html_table = "<table>\n<thead>\n"
+    html_table += row_to_html(rows[0], "th")
+    html_table += "</thead>\n<tbody>\n"
+    for row in rows[1:]:
+        html_table += row_to_html(row, "td")
+    html_table += "</tbody>\n</table>"
     return html_table
 
 # -------------------------------------------------
@@ -408,13 +425,30 @@ li {{
         f.write(html_final)
 
     print("HTML generado correctamente con estilos.")
+    return html_final
 
 # -------------------------------------------------
 # EJECUCIÓN
 # -------------------------------------------------
 
+DOCX_DIR = "docx"
+HTML_DIR = "html"
+
 if __name__ == "__main__":
-    docx_to_revista_html(
-        "CONTENIDO DEL HOMENAJE A BRANDON MEDINA GUERRERO.docx",
-        "CONTENIDO DEL HOMENAJE A BRANDON MEDINA GUERRERO.html"
-    )
+    os.makedirs(HTML_DIR, exist_ok=True)
+
+    docx_files = glob.glob(os.path.join(DOCX_DIR, "*.docx"))
+
+    if not docx_files:
+        print(f"No se encontraron archivos .docx en '{DOCX_DIR}/'.")
+
+    for docx_path in docx_files:
+        filename = os.path.basename(docx_path)
+        if filename.startswith("~$"):
+            continue
+
+        name_without_ext = os.path.splitext(filename)[0]
+        output_html = os.path.join(HTML_DIR, f"{name_without_ext}.html")
+
+        print(f"Convirtiendo: {filename}")
+        docx_to_revista_html(docx_path, output_html)
