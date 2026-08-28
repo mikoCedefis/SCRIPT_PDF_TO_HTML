@@ -1,10 +1,12 @@
 from docx import Document
 from docx.oxml.ns import qn
 from docx.text.paragraph import Paragraph
+from docx.text.run import Run
 from docx.table import Table
 import html
 import os
 import glob
+import re
 
 # -------------------------------------------------
 # ITERAR BLOQUES (PÁRRAFOS + TABLAS EN ORDEN REAL)
@@ -18,8 +20,36 @@ def iter_block_items(doc):
             yield Table(child, doc)
 
 # -------------------------------------------------
+# RUNS DE UN PÁRRAFO (INCLUYE LOS QUE ESTÁN DENTRO DE HIPERVÍNCULOS)
+# -------------------------------------------------
+
+def iter_paragraph_runs(paragraph):
+    for child in paragraph._p:
+        if child.tag == qn('w:r'):
+            yield Run(child, paragraph)
+        elif child.tag == qn('w:hyperlink'):
+            for r in child.findall(qn('w:r')):
+                yield Run(r, paragraph)
+
+# -------------------------------------------------
 # HIPERVÍNCULOS
 # -------------------------------------------------
+
+ORCID_RE = re.compile(r'^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$')
+
+def fix_broken_mailto(url):
+    """Corrige mailto: mal generados por Word sobre números de ORCID."""
+    if not url or not url.lower().startswith("mailto:"):
+        return url
+
+    target = url.split(":", 1)[1]
+    if "@" in target:
+        return url
+
+    if ORCID_RE.match(target):
+        return f"https://orcid.org/{target}"
+
+    return url
 
 def get_hyperlink(run):
     r = run._r
@@ -27,7 +57,7 @@ def get_hyperlink(run):
     if parent.tag == qn('w:hyperlink'):
         rel_id = parent.get(qn('r:id'))
         if rel_id:
-            return run.part.rels[rel_id].target_ref
+            return fix_broken_mailto(run.part.rels[rel_id].target_ref)
     return None
 
 # -------------------------------------------------
@@ -58,7 +88,7 @@ def run_to_html(run):
     return text
 
 def paragraph_to_html(paragraph):
-    return "".join(run_to_html(r) for r in paragraph.runs).strip()
+    return "".join(run_to_html(r) for r in iter_paragraph_runs(paragraph)).strip()
 
 # -------------------------------------------------
 # TABLAS
